@@ -60,11 +60,11 @@ One transaction (see `docs/DOMAIN.md`). Tests must include genuinely competing
 requests: N parallel checkouts against 3 units, asserting exactly 3 succeed and
 inventory settles at 0.
 
-## Phase 5 — Coupons · ~60 min
+## Phase 5 — Coupons · ~60 min ✅
 
-- [ ] `feat: add administrator coupon generation`
-- [ ] `feat: redeem coupon within checkout transaction`
-- [ ] `test: cover concurrent redemption and rollback on payment failure`
+- [x] `feat: add administrator coupon generation`
+- [x] `feat: redeem coupon within checkout transaction`
+- [x] `test: cover concurrent redemption and rollback on payment failure`
 
 The rollback test is why the payment fake exists: it provides a realistic
 failure point after the coupon has been claimed, proving a failed checkout does

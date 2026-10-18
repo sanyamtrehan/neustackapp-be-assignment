@@ -1,14 +1,12 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
+import { couponSettings } from './config/coupon.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  // Trust boundary: reject unknown fields outright rather than ignoring them.
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  couponSettings(); // fail fast on a bad COUPON_N or COUPON_X
+  const app = configureApp(await NestFactory.create(AppModule));
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

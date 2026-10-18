@@ -1,4 +1,4 @@
-import { registerAs } from '@nestjs/config';
+import 'dotenv/config';
 
 function positiveInt(name: string, raw: string | undefined, fallback: number): number {
   const value = raw === undefined ? fallback : Number(raw);
@@ -8,8 +8,21 @@ function positiveInt(name: string, raw: string | undefined, fallback: number): n
   return value;
 }
 
-/** n = orders per milestone, x = percent off. Misconfiguration fails at boot, not at checkout. */
-export const couponConfig = registerAs('coupon', () => ({
-  milestoneInterval: positiveInt('COUPON_N', process.env.COUPON_N, 5),
-  percentOff: positiveInt('COUPON_X', process.env.COUPON_X, 10),
-}));
+export interface CouponSettings {
+  /** n: every nth placed order makes one coupon available. */
+  milestoneInterval: number;
+  /** x: percent off, snapshotted onto each coupon when it is generated. */
+  percentOff: number;
+}
+
+/**
+ * Read from the environment on each call so a test can vary n and x. main.ts
+ * calls it during bootstrap, so a misconfigured value fails at startup rather
+ * than at checkout.
+ */
+export function couponSettings(): CouponSettings {
+  return {
+    milestoneInterval: positiveInt('COUPON_N', process.env.COUPON_N, 5),
+    percentOff: positiveInt('COUPON_X', process.env.COUPON_X, 10),
+  };
+}

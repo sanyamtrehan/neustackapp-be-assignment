@@ -70,10 +70,10 @@ The rollback test is why the payment fake exists: it provides a realistic
 failure point after the coupon has been claimed, proving a failed checkout does
 not consume a coupon.
 
-## Phase 6 — Reporting · ~30 min
+## Phase 6 — Reporting · ~30 min ✅
 
-- [ ] `feat: add administrator report`
-- [ ] `test: report reconciles with orders and coupons`
+- [x] `feat: add administrator report`
+- [x] `test: report reconciles with orders and coupons`
 
 Pure aggregate queries over orders and coupons. No counters. Repeated calls
 must not mutate state, and the test asserts that.

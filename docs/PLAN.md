@@ -5,11 +5,11 @@ timeline of how the solution developed.
 
 Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
-## Phase 0 — Foundation · ~30 min
+## Phase 0 — Foundation · ~30 min ✅
 
-- [ ] `chore: scaffold nest application`
-- [ ] `chore: add docker compose with postgres`
-- [ ] `chore: add typeorm datasource and coupon configuration`
+- [x] `chore: scaffold nest application`
+- [x] `chore: add docker compose with postgres`
+- [x] `chore: add typeorm datasource and coupon configuration`
 
 Config reads `COUPON_N` (milestone interval) and `COUPON_X` (percent off) from
 env. One `docker compose up` must work on a machine that has never seen this

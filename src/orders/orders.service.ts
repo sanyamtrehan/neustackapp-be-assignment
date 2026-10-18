@@ -192,11 +192,18 @@ export class OrdersService {
    * checkouts racing for the same coupon exactly one can win: the loser's
    * update matches no row. Nothing is read, decided on, then written.
    *
+   * @param supplied Code as the client sent it; trimmed and upper-cased
+   *   before lookup, since issued codes are uppercase.
    * @returns The coupon, for its percentage.
    * @throws NotFoundException `COUPON_NOT_FOUND` if no such code exists.
    * @throws ConflictException `COUPON_NOT_AVAILABLE` if it is already redeemed.
    */
-  private async redeemCoupon(manager: EntityManager, code: string): Promise<Coupon> {
+  private async redeemCoupon(manager: EntityManager, supplied: string): Promise<Coupon> {
+    // Codes are issued uppercase and get retyped from emails and screenshots,
+    // so matching is case-insensitive. Otherwise "reward-5-ab" reports
+    // COUPON_NOT_FOUND, which reads as "that code never existed".
+    const code = supplied.trim().toUpperCase();
+
     const claimed = await manager
       .createQueryBuilder()
       .update(Coupon)

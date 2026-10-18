@@ -92,6 +92,7 @@ Branch on `code`; it is stable. Messages may be reworded.
 | Code | Status | When |
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | Bad body or path parameter. |
+| `PAYLOAD_TOO_LARGE` | 413 | Request body above the server limit. |
 | `CART_EMPTY` | 400 | Checkout of a cart with no lines. |
 | `PAYMENT_FAILED` | 402 | Payment declined. Nothing was claimed. |
 | `CART_NOT_FOUND` `CART_ITEM_NOT_FOUND` `PRODUCT_NOT_FOUND` `ORDER_NOT_FOUND` `COUPON_NOT_FOUND` `NOT_FOUND` | 404 | No such thing. |
@@ -108,7 +109,7 @@ Branch on `code`; it is stable. Messages may be reworded.
 npm test
 ```
 
-57 tests. They need Postgres running and migrated, because the rules under
+77 tests. They need Postgres running and migrated, because the rules under
 test are partly enforced by database constraints — a mocked repository would
 prove nothing about them. The suite truncates and reseeds between tests.
 
@@ -121,6 +122,7 @@ The ones that matter are the competing and repeated ones:
 | 2 checkouts racing for 1 coupon | one wins, one `COUPON_NOT_AVAILABLE`, loser pays nothing |
 | payment declines after the coupon is claimed | coupon back to `available`, inventory restored, no order, retry works |
 | 4 simultaneous adds of one product | quantity 4, not a lost update |
+| 20 simultaneous adds, above the connection pool size | all answered, service still responsive |
 | 5 administrators generating at once | exactly 2 coupons for 10 orders, milestones 5 and 10 |
 | carts sharing products in opposite orders | no deadlock |
 

@@ -87,11 +87,11 @@ must not mutate state, and the test asserts that.
 Every failure path returns a stable, distinguishable code. Scalar serves the
 OpenAPI document Nest generates.
 
-## Phase 8 — External QA pass · deferred DECISIONS.md
+## Phase 8 — External QA pass ✅
 
-- [ ] external tester exercises the running service, produces a bug sheet
-- [ ] triage findings: real defect, intentional behaviour, or documentation gap
-- [ ] fix what is real, with a regression test for each
+- [x] external tester exercises the running service, produces a bug sheet
+- [x] triage findings: real defect, intentional behaviour, or documentation gap
+- [x] fix what is real, with a regression test for each
 
 Inserted before writing DECISIONS.md deliberately. The document is the most
 heavily weighted deliverable and should describe behaviour that has been

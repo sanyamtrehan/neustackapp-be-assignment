@@ -116,6 +116,14 @@ describe('coupons', () => {
       expect(await couponStatus(app, code)).toBe('redeemed');
     });
 
+    it('accepts a code that was retyped in the wrong case or with spaces', async () => {
+      const code = await earnCoupon();
+      const cartId = await cartWith(BEANS.id, 1);
+
+      const { body } = await checkout(cartId, `  ${code.toLowerCase()}  `).expect(201);
+      expect(body.couponCode).toBe(code);
+    });
+
     it('refuses an unknown or already redeemed code', async () => {
       const code = await earnCoupon();
       const first = await cartWith(BEANS.id, 1);

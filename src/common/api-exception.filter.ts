@@ -16,10 +16,17 @@ const CONSTRAINT_CODES: Record<string, ErrorCode> = {
   coupons_milestone_unique: 'MILESTONE_ALREADY_REWARDED',
 };
 
+/**
+ * VALIDATION_FAILED means 400 and nothing else, so a client can rely on the
+ * pairing the README documents. Other client mistakes get their own code
+ * rather than being labelled a validation failure they are not.
+ */
 function statusToCode(status: number): ErrorCode {
+  if (status === HttpStatus.BAD_REQUEST) return 'VALIDATION_FAILED';
   if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND';
   if (status === HttpStatus.PAYLOAD_TOO_LARGE) return 'PAYLOAD_TOO_LARGE';
-  if (status >= 400 && status < 500) return 'VALIDATION_FAILED';
+  if (status === HttpStatus.UNSUPPORTED_MEDIA_TYPE) return 'UNSUPPORTED_MEDIA_TYPE';
+  if (status >= 400 && status < 500) return 'CLIENT_ERROR';
   return 'INTERNAL_ERROR';
 }
 

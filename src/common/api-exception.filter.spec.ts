@@ -81,6 +81,18 @@ describe('toErrorResponse', () => {
     expect(body.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
+  it('does not call a non-400 client error a validation failure', () => {
+    // 415 from body-parser: the status is right, but it is not a validation
+    // failure, and VALIDATION_FAILED is documented as meaning 400.
+    const charset = Object.assign(new Error('unsupported charset "KLINGON"'), { status: 415 });
+    expect(toErrorResponse(charset).body.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+
+    const other = Object.assign(new Error('not acceptable'), { status: 406 });
+    const { status, body } = toErrorResponse(other);
+    expect(status).toBe(406);
+    expect(body.code).toBe('CLIENT_ERROR');
+  });
+
   it('never leaks the detail of an unexpected error', () => {
     const { status, body } = toErrorResponse(new Error('connection string: postgres://user:pw@host'));
 

@@ -43,7 +43,8 @@ All of it lives in `.env`:
 | `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | `localhost` `5432` `checkout` `checkout` `checkout` | Database. `docker-compose.yml` reads the same variables, so there is one place to change them. |
 | `PORT` | `3000` | HTTP port. |
 | `COUPON_N` | `5` | Every *n*th placed order earns one coupon. |
-| `COUPON_X` | `10` | Percent off. Snapshotted onto each coupon, so changing it never reprices one already issued. |
+| `COUPON_X` | `10` | Percent off, 1..100. Snapshotted onto each coupon, so changing it never reprices one already issued. |
+| `FAKE_PAYMENT_DECLINE` | unset | Set to `true` to make every payment fail. For demonstrating that a failed checkout returns the stock and the coupon. |
 
 A bad `COUPON_N` or `COUPON_X` fails startup rather than producing a nonsense
 discount later.
@@ -93,6 +94,8 @@ Branch on `code`; it is stable. Messages may be reworded.
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | Bad body or path parameter. |
 | `PAYLOAD_TOO_LARGE` | 413 | Request body above the server limit. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | Content type, charset or encoding the server cannot read. |
+| `CLIENT_ERROR` | other 4xx | Any other client mistake. |
 | `CART_EMPTY` | 400 | Checkout of a cart with no lines. |
 | `PAYMENT_FAILED` | 402 | Payment declined. Nothing was claimed. |
 | `CART_NOT_FOUND` `CART_ITEM_NOT_FOUND` `PRODUCT_NOT_FOUND` `ORDER_NOT_FOUND` `COUPON_NOT_FOUND` `NOT_FOUND` | 404 | No such thing. |
@@ -112,6 +115,10 @@ npm test
 77 tests. They need Postgres running and migrated, because the rules under
 test are partly enforced by database constraints — a mocked repository would
 prove nothing about them. The suite truncates and reseeds between tests.
+
+To watch a failed checkout roll back by hand, restart with
+`FAKE_PAYMENT_DECLINE=true npm run start:dev`, check out a cart holding a
+coupon, and confirm the `402`, then that stock and the coupon are untouched.
 
 The ones that matter are the competing and repeated ones:
 

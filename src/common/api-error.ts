@@ -21,6 +21,10 @@ export const ERROR_CODES = [
   'NOT_FOUND',
   /** Request body larger than the server accepts. */
   'PAYLOAD_TOO_LARGE',
+  /** Content-Type, charset or encoding the server cannot read. */
+  'UNSUPPORTED_MEDIA_TYPE',
+  /** Any other client mistake, carrying its own 4xx status. */
+  'CLIENT_ERROR',
   /** A database constraint rejected the write. A backstop, not an expected path. */
   'CONSTRAINT_VIOLATED',
   /** Anything unanticipated. The cause is logged, never returned. */

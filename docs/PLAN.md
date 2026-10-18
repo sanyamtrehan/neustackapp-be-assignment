@@ -78,11 +78,11 @@ not consume a coupon.
 Pure aggregate queries over orders and coupons. No counters. Repeated calls
 must not mutate state, and the test asserts that.
 
-## Phase 7 — Errors and docs · ~45 min
+## Phase 7 — Errors and docs · ~45 min ✅
 
-- [ ] `feat: add distinguishable error model`
+- [x] `feat: add distinguishable error model`
 - [x] `docs: serve the openapi document through scalar` (pulled forward, done after phase 4)
-- [ ] `docs: add readme`
+- [x] `docs: add readme`
 
 Every failure path returns a stable, distinguishable code. Scalar serves the
 OpenAPI document Nest generates.

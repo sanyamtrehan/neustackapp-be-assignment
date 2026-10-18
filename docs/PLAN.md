@@ -40,11 +40,11 @@ Seed: five products, one with inventory 3 so contention is easy to exercise.
 Integer minor units with unit tests. Blocks everything downstream, so it comes
 early. The percentage-discount rounding rule is decided and tested here.
 
-## Phase 3 — Carts · ~45 min
+## Phase 3 — Carts · ~45 min ✅
 
-- [ ] `feat: add cart creation and retrieval`
-- [ ] `feat: add cart item add, update and remove`
-- [ ] `test: cover cart validation rules`
+- [x] `feat: add cart creation and retrieval`
+- [x] `feat: add cart item add, update and remove`
+- [x] `test: cover cart validation rules`
 
 Invalid products and non-positive quantities never enter a cart. Viewing a cart
 returns line prices and totals computed from current product prices.

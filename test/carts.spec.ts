@@ -1,0 +1,128 @@
+import { INestApplication } from '@nestjs/common';
+import * as request from 'supertest';
+import { DataSource } from 'typeorm';
+import { BEANS, SCARCE_PRODUCT, createTestApp, resetDatabase } from './harness';
+
+const UNKNOWN_UUID = '99999999-9999-4999-8999-999999999999';
+
+describe('carts', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    app = await createTestApp();
+  });
+  beforeEach(() => resetDatabase(app));
+  afterAll(() => app.close());
+
+  const newCart = async (): Promise<string> =>
+    (await request(app.getHttpServer()).post('/carts').expect(201)).body.id;
+
+  const addItem = (cartId: string, productId: string, quantity: number) =>
+    request(app.getHttpServer()).post(`/carts/${cartId}/items`).send({ productId, quantity });
+
+  it('creates an open, empty cart', async () => {
+    const { body } = await request(app.getHttpServer()).post('/carts').expect(201);
+    expect(body).toMatchObject({ status: 'open', items: [], subtotalMinor: 0 });
+  });
+
+  it('prices lines and the subtotal from the catalog', async () => {
+    const cartId = await newCart();
+    await addItem(cartId, BEANS.id, 2).expect(201);
+    const { body } = await addItem(cartId, SCARCE_PRODUCT.id, 1).expect(201);
+
+    expect(body.subtotalMinor).toBe(BEANS.unitPriceMinor * 2 + SCARCE_PRODUCT.unitPriceMinor);
+    expect(body.items).toHaveLength(2);
+  });
+
+  // The chosen semantics: a cart is a selection, not a price quote.
+  it('reflects a price change made after the item was added', async () => {
+    const cartId = await newCart();
+    await addItem(cartId, BEANS.id, 2).expect(201);
+
+    await app
+      .get(DataSource)
+      .query('UPDATE "products" SET "unit_price_minor" = 3000 WHERE "id" = $1', [BEANS.id]);
+
+    const { body } = await request(app.getHttpServer()).get(`/carts/${cartId}`).expect(200);
+    expect(body.items[0].unitPriceMinor).toBe(3000);
+    expect(body.subtotalMinor).toBe(6000);
+  });
+
+  it('adds to the quantity when the same product is added twice', async () => {
+    const cartId = await newCart();
+    await addItem(cartId, BEANS.id, 2).expect(201);
+    const { body } = await addItem(cartId, BEANS.id, 3).expect(201);
+
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].quantity).toBe(5);
+  });
+
+  it('allows a quantity above available inventory, which checkout rejects later', async () => {
+    const cartId = await newCart();
+    const { body } = await addItem(cartId, SCARCE_PRODUCT.id, SCARCE_PRODUCT.inventory + 10).expect(201);
+    expect(body.items[0].quantity).toBe(SCARCE_PRODUCT.inventory + 10);
+  });
+
+  describe('rejects invalid input before it reaches the database', () => {
+    it.each([0, -1, 2.5, 10_001])('refuses quantity %p', async (quantity) => {
+      const cartId = await newCart();
+      await addItem(cartId, BEANS.id, quantity as number).expect(400);
+    });
+
+    it('refuses an unknown product', async () => {
+      const cartId = await newCart();
+      const { body } = await addItem(cartId, UNKNOWN_UUID, 1).expect(404);
+      expect(body.code).toBe('PRODUCT_NOT_FOUND');
+    });
+
+    it('refuses an unknown cart', async () => {
+      const { body } = await addItem(UNKNOWN_UUID, BEANS.id, 1).expect(404);
+      expect(body.code).toBe('CART_NOT_FOUND');
+    });
+
+    it('refuses unknown fields in the body', async () => {
+      const cartId = await newCart();
+      await request(app.getHttpServer())
+        .post(`/carts/${cartId}/items`)
+        .send({ productId: BEANS.id, quantity: 1, unitPriceMinor: 1 })
+        .expect(400);
+    });
+  });
+
+  it('updates and removes a line', async () => {
+    const cartId = await newCart();
+    await addItem(cartId, BEANS.id, 2).expect(201);
+
+    const updated = await request(app.getHttpServer())
+      .put(`/carts/${cartId}/items/${BEANS.id}`)
+      .send({ quantity: 7 })
+      .expect(200);
+    expect(updated.body.items[0].quantity).toBe(7);
+
+    const removed = await request(app.getHttpServer())
+      .delete(`/carts/${cartId}/items/${BEANS.id}`)
+      .expect(200);
+    expect(removed.body.items).toEqual([]);
+    expect(removed.body.subtotalMinor).toBe(0);
+  });
+
+  it('refuses to touch a line that is not in the cart', async () => {
+    const cartId = await newCart();
+    const { body } = await request(app.getHttpServer())
+      .delete(`/carts/${cartId}/items/${BEANS.id}`)
+      .expect(404);
+    expect(body.code).toBe('CART_ITEM_NOT_FOUND');
+  });
+
+  it('refuses every mutation once the cart is checked out', async () => {
+    const cartId = await newCart();
+    await addItem(cartId, BEANS.id, 1).expect(201);
+    await app.get(DataSource).query(`UPDATE "carts" SET "status" = 'checked_out' WHERE "id" = $1`, [cartId]);
+
+    const add = await addItem(cartId, SCARCE_PRODUCT.id, 1).expect(409);
+    expect(add.body.code).toBe('CART_ALREADY_CHECKED_OUT');
+
+    await request(app.getHttpServer()).put(`/carts/${cartId}/items/${BEANS.id}`).send({ quantity: 2 }).expect(409);
+    await request(app.getHttpServer()).delete(`/carts/${cartId}/items/${BEANS.id}`).expect(409);
+  });
+});

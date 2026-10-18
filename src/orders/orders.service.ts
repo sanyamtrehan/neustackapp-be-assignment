@@ -10,6 +10,8 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { CartItem } from '../carts/cart-item.entity';
+import { Coupon } from '../coupons/coupon.entity';
+import { applyPercentDiscount } from '../money';
 import { Product } from '../products/product.entity';
 import { Cart } from '../carts/cart.entity';
 import {
@@ -43,16 +45,22 @@ export class OrdersService {
    * sequence and why each step is shaped the way it is.
    *
    * @param cartId Cart to check out.
+   * @param couponCode Coupon to redeem, or undefined. On a replay this is
+   *   ignored: the existing order already has whatever coupon it was placed
+   *   with, and applying another one would change a completed order.
    * @returns The order, and whether it was created now or replayed.
-   * @throws NotFoundException `CART_NOT_FOUND`.
+   * @throws NotFoundException `CART_NOT_FOUND` or `COUPON_NOT_FOUND`.
    * @throws BadRequestException `CART_EMPTY`.
-   * @throws ConflictException `INSUFFICIENT_INVENTORY`, naming the product.
+   * @throws ConflictException `INSUFFICIENT_INVENTORY`, naming the product,
+   *   or `COUPON_NOT_AVAILABLE` if the coupon is already redeemed.
    * @throws HttpException 402 `PAYMENT_FAILED`, after the transaction has
-   *   rolled the inventory claim back.
+   *   rolled the inventory claim and the coupon redemption back.
    */
-  async checkout(cartId: string): Promise<CheckoutResult> {
+  async checkout(cartId: string, couponCode?: string): Promise<CheckoutResult> {
     try {
-      return await this.dataSource.transaction((manager) => this.runCheckout(manager, cartId));
+      return await this.dataSource.transaction((manager) =>
+        this.runCheckout(manager, cartId, couponCode),
+      );
     } catch (error) {
       if (error instanceof PaymentDeclinedError) {
         throw new HttpException(
@@ -64,7 +72,11 @@ export class OrdersService {
     }
   }
 
-  private async runCheckout(manager: EntityManager, cartId: string): Promise<CheckoutResult> {
+  private async runCheckout(
+    manager: EntityManager,
+    cartId: string,
+    couponCode?: string,
+  ): Promise<CheckoutResult> {
     // Lock the cart row first. Two requests for the same cart serialise here,
     // which is what makes a retry safe: the second one waits, then sees the
     // first one's result instead of racing it.
@@ -100,14 +112,26 @@ export class OrdersService {
       lineTotalMinor: item.product.unitPriceMinor * item.quantity,
     }));
     const subtotalMinor = lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
-    const totalMinor = subtotalMinor;
+
+    // Claimed inside the transaction, so a failure below returns it to
+    // available without any compensating write.
+    const coupon = couponCode ? await this.redeemCoupon(manager, couponCode) : null;
+    const { discountMinor, totalMinor } = coupon
+      ? applyPercentDiscount(subtotalMinor, coupon.percentOff)
+      : { discountMinor: 0, totalMinor: subtotalMinor };
 
     // Last, because everything it could invalidate is already claimed: a
-    // decline here rolls back the inventory above.
+    // decline here rolls back the inventory and the coupon above.
     await this.payments.charge({ reference: cartId, amountMinor: totalMinor });
 
     const order = await manager.save(
-      manager.create(Order, { cartId, subtotalMinor, discountMinor: 0, totalMinor }),
+      manager.create(Order, {
+        cartId,
+        subtotalMinor,
+        discountMinor,
+        totalMinor,
+        couponId: coupon?.id ?? null,
+      }),
     );
     await manager.insert(
       OrderItem,
@@ -156,6 +180,39 @@ export class OrdersService {
         });
       }
     }
+  }
+
+  /**
+   * Claims a coupon for this checkout.
+   *
+   * One conditional statement flips `available` to `redeemed`, so of two
+   * checkouts racing for the same coupon exactly one can win: the loser's
+   * update matches no row. Nothing is read, decided on, then written.
+   *
+   * @returns The coupon, for its percentage.
+   * @throws NotFoundException `COUPON_NOT_FOUND` if no such code exists.
+   * @throws ConflictException `COUPON_NOT_AVAILABLE` if it is already redeemed.
+   */
+  private async redeemCoupon(manager: EntityManager, code: string): Promise<Coupon> {
+    const claimed = await manager
+      .createQueryBuilder()
+      .update(Coupon)
+      .set({ status: 'redeemed' })
+      .where('"code" = :code AND "status" = :available', { code, available: 'available' })
+      .execute();
+
+    if (claimed.affected === 0) {
+      const exists = await manager.existsBy(Coupon, { code });
+      if (!exists) {
+        throw new NotFoundException({ code: 'COUPON_NOT_FOUND', message: `No coupon ${code}` });
+      }
+      throw new ConflictException({
+        code: 'COUPON_NOT_AVAILABLE',
+        message: `Coupon ${code} has already been redeemed`,
+      });
+    }
+
+    return manager.findOneByOrFail(Coupon, { code });
   }
 
   /**

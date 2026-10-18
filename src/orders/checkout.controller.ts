@@ -1,7 +1,8 @@
-import { Controller, HttpStatus, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
+import { Body, Controller, HttpStatus, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ApiError } from '../common/api-error';
+import { CheckoutDto } from './dto/checkout.dto';
 import { OrderView } from './order.view';
 import { OrdersService } from './orders.service';
 
@@ -17,6 +18,11 @@ export class CheckoutController {
    * any retry returns 200 with that same order, so a client that lost the
    * response can repeat the call safely and tell the two apart.
    *
+   * An optional `couponCode` is redeemed as part of the same transaction. A
+   * code that is unknown or already spent fails the whole checkout rather
+   * than quietly charging full price, so the customer is never surprised by
+   * the amount. On a retry the code is ignored: the order already exists.
+   *
    * @returns 201 created, or 200 on replay.
    *   400 `CART_EMPTY`, 404 `CART_NOT_FOUND`,
    *   409 `INSUFFICIENT_INVENTORY`, 402 `PAYMENT_FAILED`.
@@ -25,14 +31,19 @@ export class CheckoutController {
   @ApiResponse({ status: 200, type: OrderView, description: 'Replay of an earlier checkout for this cart' })
   @ApiResponse({ status: 400, type: ApiError, description: 'CART_EMPTY' })
   @ApiResponse({ status: 402, type: ApiError, description: 'PAYMENT_FAILED, nothing was claimed' })
-  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND' })
-  @ApiResponse({ status: 409, type: ApiError, description: 'INSUFFICIENT_INVENTORY' })
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND or COUPON_NOT_FOUND' })
+  @ApiResponse({
+    status: 409,
+    type: ApiError,
+    description: 'INSUFFICIENT_INVENTORY or COUPON_NOT_AVAILABLE',
+  })
   @Post(':cartId/checkout')
   async checkout(
     @Param('cartId', ParseUUIDPipe) cartId: string,
+    @Body() body: CheckoutDto,
     @Res({ passthrough: true }) response: Response,
   ): Promise<OrderView> {
-    const { order, replayed } = await this.orders.checkout(cartId);
+    const { order, replayed } = await this.orders.checkout(cartId, body.couponCode);
     response.status(replayed ? HttpStatus.OK : HttpStatus.CREATED);
     return order;
   }

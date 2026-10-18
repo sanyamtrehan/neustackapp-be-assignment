@@ -10,6 +10,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { CartItem } from '../carts/cart-item.entity';
+import { Product } from '../products/product.entity';
 import { Cart } from '../carts/cart.entity';
 import {
   PAYMENT_PROVIDER,
@@ -135,14 +136,18 @@ export class OrdersService {
     const ordered = [...items].sort((a, b) => a.productId.localeCompare(b.productId));
 
     for (const item of ordered) {
-      const claimed = (await manager.query(
-        `UPDATE "products" SET "inventory" = "inventory" - $1
-          WHERE "id" = $2 AND "inventory" >= $1
-          RETURNING "id"`,
-        [item.quantity, item.productId],
-      )) as { id: string }[];
+      // affected, not the returned rows: manager.query() hands back
+      // [rows, count] for an UPDATE, so a row count of zero is the only
+      // honest way to detect that the condition did not hold.
+      const claimed = await manager
+        .createQueryBuilder()
+        .update(Product)
+        .set({ inventory: () => '"inventory" - :quantity' })
+        .where('"id" = :productId AND "inventory" >= :quantity')
+        .setParameters({ productId: item.productId, quantity: item.quantity })
+        .execute();
 
-      if (claimed.length === 0) {
+      if (claimed.affected === 0) {
         throw new ConflictException({
           code: 'INSUFFICIENT_INVENTORY',
           message: `Not enough inventory for product ${item.productId}`,

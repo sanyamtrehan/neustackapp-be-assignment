@@ -4,6 +4,35 @@ import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
+import {
+  PAYMENT_PROVIDER,
+  PaymentCharge,
+  PaymentDeclinedError,
+  PaymentProvider,
+  PaymentReceipt,
+} from '../src/payments/payment.provider';
+
+/**
+ * Payment stub a test can steer. Flip `declineNext` to make the charge fail at
+ * the point where inventory, and later a coupon, have already been claimed.
+ */
+export class ControllablePaymentProvider implements PaymentProvider {
+  declineNext = false;
+  charges: PaymentCharge[] = [];
+
+  async charge(charge: PaymentCharge): Promise<PaymentReceipt> {
+    this.charges.push(charge);
+    if (this.declineNext) {
+      throw new PaymentDeclinedError('Declined by test');
+    }
+    return { reference: `test_${charge.reference}` };
+  }
+
+  reset(): void {
+    this.declineNext = false;
+    this.charges = [];
+  }
+}
 
 /**
  * The seeded catalog, restored before every test. Duplicated from the seed
@@ -21,11 +50,34 @@ export const TEST_PRODUCTS = [
 export const SCARCE_PRODUCT = TEST_PRODUCTS[4];
 export const BEANS = TEST_PRODUCTS[0];
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = configureApp(moduleRef.createNestApplication());
+/**
+ * Boots the real application, optionally with a steerable payment provider.
+ *
+ * @param payments Stub substituted for the fake provider, so a test can make
+ *   the charge fail deliberately.
+ */
+export async function createTestApp(payments?: PaymentProvider): Promise<INestApplication> {
+  const builder = Test.createTestingModule({ imports: [AppModule] });
+  if (payments) {
+    builder.overrideProvider(PAYMENT_PROVIDER).useValue(payments);
+  }
+  const app = configureApp((await builder.compile()).createNestApplication());
   await app.init();
   return app;
+}
+
+/** Counts rows, for assertions about what a batch of concurrent requests produced. */
+export async function countRows(app: INestApplication, table: string): Promise<number> {
+  const [row] = await app.get(DataSource).query(`SELECT count(*)::int AS count FROM "${table}"`);
+  return row.count;
+}
+
+/** Reads one product's current inventory. */
+export async function inventoryOf(app: INestApplication, productId: string): Promise<number> {
+  const [row] = await app
+    .get(DataSource)
+    .query('SELECT "inventory" FROM "products" WHERE "id" = $1', [productId]);
+  return row.inventory;
 }
 
 /** Clears everything transactional and puts the catalog back to known values. */

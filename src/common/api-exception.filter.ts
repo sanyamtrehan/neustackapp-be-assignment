@@ -18,8 +18,20 @@ const CONSTRAINT_CODES: Record<string, ErrorCode> = {
 
 function statusToCode(status: number): ErrorCode {
   if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND';
-  if (status === HttpStatus.BAD_REQUEST) return 'VALIDATION_FAILED';
+  if (status === HttpStatus.PAYLOAD_TOO_LARGE) return 'PAYLOAD_TOO_LARGE';
+  if (status >= 400 && status < 500) return 'VALIDATION_FAILED';
   return 'INTERNAL_ERROR';
+}
+
+/**
+ * Express middleware errors, such as body-parser rejecting an oversized or
+ * malformed body, are plain Errors carrying an HTTP status. They are ordinary
+ * client mistakes, so they must not be reported as a server fault.
+ */
+function statusBearingError(exception: unknown): number | undefined {
+  const status = (exception as { status?: unknown; statusCode?: unknown })?.status
+    ?? (exception as { statusCode?: unknown })?.statusCode;
+  return typeof status === 'number' && status >= 400 && status < 500 ? status : undefined;
 }
 
 /**
@@ -68,6 +80,17 @@ export function toErrorResponse(exception: unknown): { status: number; body: Api
         },
       };
     }
+  }
+
+  const clientStatus = statusBearingError(exception);
+  if (clientStatus) {
+    return {
+      status: clientStatus,
+      body: {
+        code: statusToCode(clientStatus),
+        message: (exception as Error).message || 'Request rejected',
+      },
+    };
   }
 
   // Unanticipated. The cause is logged by the filter; the client is told

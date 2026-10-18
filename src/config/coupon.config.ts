@@ -1,9 +1,14 @@
 import 'dotenv/config';
 
-function positiveInt(name: string, raw: string | undefined, fallback: number): number {
+function boundedInt(
+  name: string,
+  raw: string | undefined,
+  fallback: number,
+  max = Number.MAX_SAFE_INTEGER,
+): number {
   const value = raw === undefined ? fallback : Number(raw);
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer, got ${raw}`);
+  if (!Number.isInteger(value) || value <= 0 || value > max) {
+    throw new Error(`${name} must be an integer between 1 and ${max}, got ${raw}`);
   }
   return value;
 }
@@ -22,7 +27,9 @@ export interface CouponSettings {
  */
 export function couponSettings(): CouponSettings {
   return {
-    milestoneInterval: positiveInt('COUPON_N', process.env.COUPON_N, 5),
-    percentOff: positiveInt('COUPON_X', process.env.COUPON_X, 10),
+    milestoneInterval: boundedInt('COUPON_N', process.env.COUPON_N, 5),
+    // 100 is the ceiling the coupons_percent_off_range constraint enforces;
+    // without it the service starts and then cannot issue a single coupon.
+    percentOff: boundedInt('COUPON_X', process.env.COUPON_X, 10, 100),
   };
 }

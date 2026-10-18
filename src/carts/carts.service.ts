@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Product } from '../products/product.entity';
 import { CartItem } from './cart-item.entity';
 import { Cart } from './cart.entity';
 import { CartView, toCartView } from './cart.view';
+import { MAX_CART_ITEM_QUANTITY } from './dto/cart-item.dto';
 
 /** The cart row as the lock returns it; the lines are loaded separately. */
 interface LockedCart {
@@ -68,8 +69,10 @@ export class CartsService {
    *
    * @param cartId Cart to add to.
    * @param productId Product to add; must exist in the catalog.
-   * @param quantity Units to add, already validated as 1..10000 by the DTO.
+   * @param quantity Units to add, validated as 1..10000 by the DTO. The
+   *   resulting line quantity is checked against the same cap here.
    * @returns The cart after the change.
+   * @throws BadRequestException `VALIDATION_FAILED` if the result exceeds the cap.
    * @throws NotFoundException `CART_NOT_FOUND` or `PRODUCT_NOT_FOUND`.
    * @throws ConflictException `CART_ALREADY_CHECKED_OUT` if the cart is closed.
    */
@@ -79,7 +82,16 @@ export class CartsService {
 
       const existing = await manager.findOneBy(CartItem, { cartId, productId });
       if (existing) {
-        await manager.update(CartItem, existing.id, { quantity: existing.quantity + quantity });
+        // The DTO bounds the increment; the cap belongs on the result, or
+        // adding 10000 twice would quietly leave 20000 on the line.
+        const combined = existing.quantity + quantity;
+        if (combined > MAX_CART_ITEM_QUANTITY) {
+          throw new BadRequestException({
+            code: 'VALIDATION_FAILED',
+            message: `Cart already holds ${existing.quantity}; adding ${quantity} would exceed the limit of ${MAX_CART_ITEM_QUANTITY}`,
+          });
+        }
+        await manager.update(CartItem, existing.id, { quantity: combined });
       } else {
         await manager.insert(CartItem, { cartId, productId, quantity });
       }

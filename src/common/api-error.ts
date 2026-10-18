@@ -19,6 +19,8 @@ export const ERROR_CODES = [
   'VALIDATION_FAILED',
   /** No such route. */
   'NOT_FOUND',
+  /** Request body larger than the server accepts. */
+  'PAYLOAD_TOO_LARGE',
   /** A database constraint rejected the write. A backstop, not an expected path. */
   'CONSTRAINT_VIOLATED',
   /** Anything unanticipated. The cause is logged, never returned. */

@@ -69,6 +69,18 @@ describe('toErrorResponse', () => {
     expect(body.code).toBe('CONSTRAINT_VIOLATED');
   });
 
+  it('treats an oversized body as a client error, not a server fault', () => {
+    // body-parser throws a plain Error carrying a status, not an HttpException.
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      type: 'entity.too.large',
+    });
+
+    const { status, body } = toErrorResponse(tooLarge);
+    expect(status).toBe(413);
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
   it('never leaks the detail of an unexpected error', () => {
     const { status, body } = toErrorResponse(new Error('connection string: postgres://user:pw@host'));
 

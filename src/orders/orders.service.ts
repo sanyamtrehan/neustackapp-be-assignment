@@ -120,10 +120,6 @@ export class OrdersService {
       ? applyPercentDiscount(subtotalMinor, coupon.percentOff)
       : { discountMinor: 0, totalMinor: subtotalMinor };
 
-    // Last, because everything it could invalidate is already claimed: a
-    // decline here rolls back the inventory and the coupon above.
-    await this.payments.charge({ reference: cartId, amountMinor: totalMinor });
-
     const order = await manager.save(
       manager.create(Order, {
         cartId,
@@ -138,6 +134,13 @@ export class OrdersService {
       lines.map((line) => ({ orderId: order.id, ...line })),
     );
     await manager.update(Cart, { id: cartId }, { status: 'checked_out' });
+
+    // Charged after every row is written, so a failed write cannot take money
+    // without producing an order. A decline still rolls all of it back. The
+    // remaining window is a crash between this returning and the commit; the
+    // cart id is the idempotency reference, so a retry of a real provider
+    // settles that rather than charging twice.
+    await this.payments.charge({ reference: cartId, amountMinor: totalMinor });
 
     return { order: await this.loadOrder(manager, order.id), replayed: false };
   }

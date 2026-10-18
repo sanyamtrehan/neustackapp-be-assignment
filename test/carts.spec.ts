@@ -69,6 +69,35 @@ describe('carts', () => {
       await addItem(cartId, BEANS.id, quantity as number).expect(400);
     });
 
+    it.each([true, '5', ' 7 ', '0x5', null, [3]])(
+      'refuses a quantity of %p that is not a JSON integer',
+      async (quantity) => {
+        const cartId = await newCart();
+        await addItem(cartId, BEANS.id, quantity as unknown as number).expect(400);
+      },
+    );
+
+    it('refuses an add that would push the line past the cap', async () => {
+      const cartId = await newCart();
+      await addItem(cartId, BEANS.id, 10_000).expect(201);
+
+      const { body } = await addItem(cartId, BEANS.id, 1).expect(400);
+      expect(body.code).toBe('VALIDATION_FAILED');
+
+      // The line is untouched by the refused add.
+      const cart = await request(app.getHttpServer()).get(`/carts/${cartId}`).expect(200);
+      expect(cart.body.items[0].quantity).toBe(10_000);
+    });
+
+    it('refuses a body larger than the server accepts', async () => {
+      const cartId = await newCart();
+      const { body } = await request(app.getHttpServer())
+        .post(`/carts/${cartId}/items`)
+        .send({ productId: BEANS.id, quantity: 1, note: 'A'.repeat(200_000) })
+        .expect(413);
+      expect(body.code).toBe('PAYLOAD_TOO_LARGE');
+    });
+
     it('refuses an unknown product', async () => {
       const cartId = await newCart();
       const { body } = await addItem(cartId, UNKNOWN_UUID, 1).expect(404);

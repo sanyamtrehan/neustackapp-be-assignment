@@ -1,18 +1,30 @@
 import { Cart } from './cart.entity';
 import { CartStatus } from './cart.entity';
 
-export interface CartLineView {
+export class CartLineView {
   productId: string;
+
+  /** Product name as it reads in the catalog right now. */
   name: string;
+
+  /** Current catalog price, in minor units. */
   unitPriceMinor: number;
+
   quantity: number;
+
+  /** unitPriceMinor * quantity. */
   lineTotalMinor: number;
 }
 
-export interface CartView {
+export class CartView {
   id: string;
+
+  /** `open` until checkout succeeds, then `checked_out` and immutable. */
   status: CartStatus;
+
   items: CartLineView[];
+
+  /** Sum of the line totals, in minor units. */
   subtotalMinor: number;
 }
 

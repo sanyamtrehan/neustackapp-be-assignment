@@ -1,7 +1,11 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiError } from '../common/api-error';
 import { OrderView } from './order.view';
 import { OrdersService } from './orders.service';
 
+@ApiTags('orders')
+@ApiResponse({ status: 404, type: ApiError, description: 'ORDER_NOT_FOUND' })
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}

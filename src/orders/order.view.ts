@@ -1,21 +1,40 @@
 import { Order } from './order.entity';
 
-export interface OrderLineView {
+export class OrderLineView {
   productId: string;
+
+  /** Product name snapshotted at checkout, not the catalog's current name. */
   name: string;
+
+  /** Unit price snapshotted at checkout, in minor units. */
   unitPriceMinor: number;
+
   quantity: number;
+
+  /** unitPriceMinor * quantity, as stored on the order. */
   lineTotalMinor: number;
 }
 
-export interface OrderView {
+export class OrderView {
   id: string;
+
+  /** The cart this order was created from. One order per cart, ever. */
   cartId: string;
+
   items: OrderLineView[];
+
+  /** Sum of the line totals before any discount, in minor units. */
   subtotalMinor: number;
+
+  /** Discount applied, in minor units. Zero when no coupon was used. */
   discountMinor: number;
+
+  /** subtotalMinor - discountMinor. Never negative. */
   totalMinor: number;
+
+  /** Code of the coupon redeemed, or null. */
   couponCode: string | null;
+
   createdAt: Date;
 }
 

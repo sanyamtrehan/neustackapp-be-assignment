@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiError } from '../common/api-error';
 import { CartsService } from './carts.service';
 import { CartView } from './cart.view';
 import { AddCartItemDto, UpdateCartItemDto } from './dto/cart-item.dto';
@@ -11,6 +13,7 @@ import { AddCartItemDto, UpdateCartItemDto } from './dto/cart-item.dto';
  * handler runs; bodies are validated by their DTOs, and unknown fields are
  * rejected rather than ignored.
  */
+@ApiTags('carts')
 @Controller('carts')
 export class CartsController {
   constructor(private readonly carts: CartsService) {}
@@ -31,6 +34,7 @@ export class CartsController {
    * @returns 200 with lines, line totals and subtotal.
    *   400 if `cartId` is not a UUID, 404 `CART_NOT_FOUND`.
    */
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND' })
   @Get(':cartId')
   view(@Param('cartId', ParseUUIDPipe) cartId: string): Promise<CartView> {
     return this.carts.view(cartId);
@@ -48,6 +52,9 @@ export class CartsController {
    *   400 for an invalid body, 404 `CART_NOT_FOUND` or `PRODUCT_NOT_FOUND`,
    *   409 `CART_ALREADY_CHECKED_OUT`.
    */
+  @ApiResponse({ status: 400, type: ApiError, description: 'Invalid quantity or unknown field' })
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND or PRODUCT_NOT_FOUND' })
+  @ApiResponse({ status: 409, type: ApiError, description: 'CART_ALREADY_CHECKED_OUT' })
   @Post(':cartId/items')
   addItem(
     @Param('cartId', ParseUUIDPipe) cartId: string,
@@ -66,6 +73,9 @@ export class CartsController {
    *   400 for an invalid body, 404 `CART_NOT_FOUND` or `CART_ITEM_NOT_FOUND`,
    *   409 `CART_ALREADY_CHECKED_OUT`.
    */
+  @ApiResponse({ status: 400, type: ApiError, description: 'Invalid quantity or unknown field' })
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND or CART_ITEM_NOT_FOUND' })
+  @ApiResponse({ status: 409, type: ApiError, description: 'CART_ALREADY_CHECKED_OUT' })
   @Put(':cartId/items/:productId')
   setItemQuantity(
     @Param('cartId', ParseUUIDPipe) cartId: string,
@@ -82,6 +92,8 @@ export class CartsController {
    *   404 `CART_NOT_FOUND` or `CART_ITEM_NOT_FOUND`,
    *   409 `CART_ALREADY_CHECKED_OUT`.
    */
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND or CART_ITEM_NOT_FOUND' })
+  @ApiResponse({ status: 409, type: ApiError, description: 'CART_ALREADY_CHECKED_OUT' })
   @Delete(':cartId/items/:productId')
   removeItem(
     @Param('cartId', ParseUUIDPipe) cartId: string,

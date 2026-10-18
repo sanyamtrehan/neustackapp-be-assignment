@@ -1,8 +1,11 @@
 import { Controller, HttpStatus, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { ApiError } from '../common/api-error';
 import { OrderView } from './order.view';
 import { OrdersService } from './orders.service';
 
+@ApiTags('checkout')
 @Controller('carts')
 export class CheckoutController {
   constructor(private readonly orders: OrdersService) {}
@@ -18,6 +21,12 @@ export class CheckoutController {
    *   400 `CART_EMPTY`, 404 `CART_NOT_FOUND`,
    *   409 `INSUFFICIENT_INVENTORY`, 402 `PAYMENT_FAILED`.
    */
+  @ApiResponse({ status: 201, type: OrderView, description: 'Order created' })
+  @ApiResponse({ status: 200, type: OrderView, description: 'Replay of an earlier checkout for this cart' })
+  @ApiResponse({ status: 400, type: ApiError, description: 'CART_EMPTY' })
+  @ApiResponse({ status: 402, type: ApiError, description: 'PAYMENT_FAILED, nothing was claimed' })
+  @ApiResponse({ status: 404, type: ApiError, description: 'CART_NOT_FOUND' })
+  @ApiResponse({ status: 409, type: ApiError, description: 'INSUFFICIENT_INVENTORY' })
   @Post(':cartId/checkout')
   async checkout(
     @Param('cartId', ParseUUIDPipe) cartId: string,

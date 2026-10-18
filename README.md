@@ -167,4 +167,5 @@ git log --format='%ad %s' --date=iso
 | `npm test` | Full suite. |
 | `npm run migration:run` / `:revert` | Apply or roll back schema. |
 | `npm run migration:generate -- src/migrations/Name` | Diff entities against the database. |
+| `npm run db:reset` | Destroy the database and rebuild it seeded. Useful between manual test runs. |
 | `docker compose down -v` | Destroy the database, including all data. |

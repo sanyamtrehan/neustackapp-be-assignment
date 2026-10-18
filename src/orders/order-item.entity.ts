@@ -12,7 +12,7 @@ export class OrderItem {
   orderId: string;
 
   @ManyToOne(() => Order, (order) => order.items, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'order_id' })
+  @JoinColumn({ name: 'order_id', foreignKeyConstraintName: 'order_items_order_fk' })
   order: Order;
 
   /** Plain column, not a foreign key: the order must still explain itself if the product is deleted. */

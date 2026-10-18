@@ -14,14 +14,14 @@ export class CartItem {
   cartId: string;
 
   @ManyToOne(() => Cart, (cart) => cart.items, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'cart_id' })
+  @JoinColumn({ name: 'cart_id', foreignKeyConstraintName: 'cart_items_cart_fk' })
   cart: Cart;
 
   @Column({ name: 'product_id', type: 'uuid' })
   productId: string;
 
   @ManyToOne(() => Product, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'product_id' })
+  @JoinColumn({ name: 'product_id', foreignKeyConstraintName: 'cart_items_product_fk' })
   product: Product;
 
   @Column({ type: 'integer' })

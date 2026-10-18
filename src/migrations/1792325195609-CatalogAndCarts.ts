@@ -1,26 +1,99 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 
 export class CatalogAndCarts1792325195609 implements MigrationInterface {
-    name = 'CatalogAndCarts1792325195609'
+  name = 'CatalogAndCarts1792325195609';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        // TypeORM emits uuid_generate_v4() for uuid primary keys; that lives in uuid-ossp.
-        await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
-        await queryRunner.query(`CREATE TABLE "products" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(200) NOT NULL, "unit_price_minor" integer NOT NULL, "inventory" integer NOT NULL, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "products_unit_price_non_negative" CHECK ("unit_price_minor" >= 0), CONSTRAINT "products_inventory_non_negative" CHECK ("inventory" >= 0), CONSTRAINT "PK_0806c755e0aca124e67c0cf6d7d" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TABLE "cart_items" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "cart_id" uuid NOT NULL, "product_id" uuid NOT NULL, "quantity" integer NOT NULL, CONSTRAINT "cart_items_quantity_positive" CHECK ("quantity" > 0), CONSTRAINT "PK_6fccf5ec03c172d27a28a82928b" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "cart_items_cart_product_unique" ON "cart_items" ("cart_id", "product_id") `);
-        await queryRunner.query(`CREATE TABLE "carts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "status" character varying(20) NOT NULL DEFAULT 'open', "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "carts_status_valid" CHECK ("status" IN ('open', 'checked_out')), CONSTRAINT "PK_b5f695a59f5ebb50af3c8160816" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`ALTER TABLE "cart_items" ADD CONSTRAINT "FK_6385a745d9e12a89b859bb25623" FOREIGN KEY ("cart_id") REFERENCES "carts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "cart_items" ADD CONSTRAINT "FK_30e89257a105eab7648a35c7fce" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-    }
+  private readonly productsTable = new Table({
+    name: 'products',
+    columns: [
+      {
+        name: 'id',
+        type: 'uuid',
+        isPrimary: true,
+        isGenerated: true,
+        generationStrategy: 'uuid',
+        default: 'uuid_generate_v4()',
+      },
+      { name: 'name', type: 'character varying', length: '200', isNullable: false },
+      // Minor units (cents). Integer everywhere; currency never touches a float.
+      { name: 'unit_price_minor', type: 'integer', isNullable: false },
+      { name: 'inventory', type: 'integer', isNullable: false },
+      { name: 'created_at', type: 'timestamptz', isNullable: false, default: 'now()' },
+      { name: 'updated_at', type: 'timestamptz', isNullable: false, default: 'now()' },
+    ],
+    checks: [
+      { name: 'products_inventory_non_negative', expression: '"inventory" >= 0' },
+      { name: 'products_unit_price_non_negative', expression: '"unit_price_minor" >= 0' },
+    ],
+  });
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "cart_items" DROP CONSTRAINT "FK_30e89257a105eab7648a35c7fce"`);
-        await queryRunner.query(`ALTER TABLE "cart_items" DROP CONSTRAINT "FK_6385a745d9e12a89b859bb25623"`);
-        await queryRunner.query(`DROP TABLE "carts"`);
-        await queryRunner.query(`DROP INDEX "public"."cart_items_cart_product_unique"`);
-        await queryRunner.query(`DROP TABLE "cart_items"`);
-        await queryRunner.query(`DROP TABLE "products"`);
-    }
+  private readonly cartsTable = new Table({
+    name: 'carts',
+    columns: [
+      {
+        name: 'id',
+        type: 'uuid',
+        isPrimary: true,
+        isGenerated: true,
+        generationStrategy: 'uuid',
+        default: 'uuid_generate_v4()',
+      },
+      { name: 'status', type: 'character varying', length: '20', isNullable: false, default: "'open'" },
+      { name: 'created_at', type: 'timestamptz', isNullable: false, default: 'now()' },
+      { name: 'updated_at', type: 'timestamptz', isNullable: false, default: 'now()' },
+    ],
+    checks: [{ name: 'carts_status_valid', expression: `"status" IN ('open', 'checked_out')` }],
+  });
 
+  private readonly cartItemsTable = new Table({
+    name: 'cart_items',
+    columns: [
+      {
+        name: 'id',
+        type: 'uuid',
+        isPrimary: true,
+        isGenerated: true,
+        generationStrategy: 'uuid',
+        default: 'uuid_generate_v4()',
+      },
+      { name: 'cart_id', type: 'uuid', isNullable: false },
+      { name: 'product_id', type: 'uuid', isNullable: false },
+      { name: 'quantity', type: 'integer', isNullable: false },
+    ],
+    checks: [{ name: 'cart_items_quantity_positive', expression: '"quantity" > 0' }],
+    // One row per product per cart: adding the same product twice adjusts quantity.
+    indices: [
+      { name: 'cart_items_cart_product_unique', columnNames: ['cart_id', 'product_id'], isUnique: true },
+    ],
+    foreignKeys: [
+      {
+        name: 'cart_items_cart_fk',
+        columnNames: ['cart_id'],
+        referencedTableName: 'carts',
+        referencedColumnNames: ['id'],
+        onDelete: 'CASCADE',
+      },
+      {
+        name: 'cart_items_product_fk',
+        columnNames: ['product_id'],
+        referencedTableName: 'products',
+        referencedColumnNames: ['id'],
+        onDelete: 'RESTRICT',
+      },
+    ],
+  });
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // No builder API for extensions; uuid_generate_v4() lives in uuid-ossp.
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await queryRunner.createTable(this.productsTable);
+    await queryRunner.createTable(this.cartsTable);
+    await queryRunner.createTable(this.cartItemsTable);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable(this.cartItemsTable);
+    await queryRunner.dropTable(this.cartsTable);
+    await queryRunner.dropTable(this.productsTable);
+  }
 }

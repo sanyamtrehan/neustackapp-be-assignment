@@ -35,6 +35,15 @@ checkouts, inventory contention, and two operations competing for one coupon.
 - Money is integer minor units everywhere. No floats, ever, for currency.
 - Invariants are enforced by database constraints where possible, service code
   only where they cannot be.
+- Migrations use the TypeORM schema builder (`new Table({...})`, `createTable`),
+  not raw DDL strings. `migration:generate` emits raw SQL, so generated output
+  gets rewritten before it is committed. Raw SQL stays only where no builder API
+  exists (`CREATE EXTENSION`) or for seed data, which uses bound parameters.
+- Every unique, check and foreign key constraint is explicitly named, on the
+  entity and in the migration alike. Hashed names like `UQ_0b15e175` are useless
+  in an error response and in a code review.
+- Entities and migrations must not drift: `npm run migration:generate` has to
+  report "No changes in database schema were found" on a migrated database.
 - New non-trivial logic ships with a test. Trivial changes do not need one.
 
 ## How we work

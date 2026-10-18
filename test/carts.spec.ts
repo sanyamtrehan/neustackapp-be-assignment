@@ -80,6 +80,19 @@ describe('carts', () => {
       expect(body.code).toBe('CART_NOT_FOUND');
     });
 
+    it('gives validation failures the same shape as every other error', async () => {
+      const cartId = await newCart();
+      const { body } = await addItem(cartId, BEANS.id, 0).expect(400);
+
+      expect(body.code).toBe('VALIDATION_FAILED');
+      expect(body.message).toContain('quantity');
+    });
+
+    it('answers an unknown route with a coded error, not an html page', async () => {
+      const { body } = await request(app.getHttpServer()).get('/no-such-route').expect(404);
+      expect(body.code).toBe('NOT_FOUND');
+    });
+
     it('refuses unknown fields in the body', async () => {
       const cartId = await newCart();
       await request(app.getHttpServer())

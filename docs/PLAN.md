@@ -99,9 +99,9 @@ verified from outside, not behaviour assumed from the inside by the person who
 wrote it. Anything triaged as intentional is a candidate for the ambiguities
 and chosen-semantics section.
 
-## Phase 9 — DECISIONS.md · ~60 min
+## Phase 9 — DECISIONS.md · ~60 min ✅
 
-- [ ] `docs: add decisions`
+- [x] `docs: add decisions`
 
 Written last, when the decisions are real rather than predicted. Covers
 invariants, ambiguities and chosen semantics, at least five material decisions

@@ -164,8 +164,9 @@ Briefly; the full reasoning is in [DECISIONS.md](DECISIONS.md).
 
 ## Time spent
 
-Roughly 3.5 hours of working time, inside the stated 4–6 hour box. For the
-development timeline:
+About 5 hours, inside the stated 4–6 hour box: first commit 17:24, last 22:28,
+with the pauses in between spent on external QA runs and review rather than
+away from the work. For the development timeline:
 
 ```bash
 git log --format='%ad %s' --date=iso

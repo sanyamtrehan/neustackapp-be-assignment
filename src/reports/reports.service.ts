@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { CouponTotalsView, ProductSalesView, ReportView } from './report.view';
 
 /**
@@ -23,10 +23,19 @@ export class ReportsService {
    * is no stored counter to drift out of step with the rows, and nothing is
    * written, so calling it repeatedly cannot change an answer.
    *
+   * The three queries run in one REPEATABLE READ transaction so they share a
+   * single view of the data. Left to their own snapshots, a checkout
+   * committing between them would be counted by one query and not another,
+   * and the response would disagree with itself.
+   *
    * @returns Order and revenue totals, per-product quantities, coupon counts.
    */
   async build(): Promise<ReportView> {
-    const [totals] = (await this.dataSource.query(`
+    return this.dataSource.transaction('REPEATABLE READ', (manager) => this.readAll(manager));
+  }
+
+  private async readAll(manager: EntityManager): Promise<ReportView> {
+    const [totals] = (await manager.query(`
       SELECT count(*)::int                            AS orders_placed,
              coalesce(sum("subtotal_minor"), 0)       AS gross_minor,
              coalesce(sum("discount_minor"), 0)       AS discounts_minor,
@@ -37,7 +46,7 @@ export class ReportsService {
     // Grouped by product id, not by name: a product renamed between two
     // orders is still one product. The name shown is the most recent
     // snapshot, so the report reads like the catalog the customer saw last.
-    const productSales = (await this.dataSource.query(`
+    const productSales = (await manager.query(`
       SELECT oi."product_id"                                                  AS product_id,
              (array_agg(oi."product_name" ORDER BY o."created_at" DESC))[1]   AS name,
              sum(oi."quantity")::int                                          AS quantity,
@@ -48,7 +57,7 @@ export class ReportsService {
        ORDER BY name
     `)) as Record<string, string | number>[];
 
-    const [coupons] = (await this.dataSource.query(`
+    const [coupons] = (await manager.query(`
       SELECT count(*)::int                                            AS generated,
              count(*) FILTER (WHERE "status" = 'available')::int       AS available,
              count(*) FILTER (WHERE "status" = 'redeemed')::int        AS redeemed

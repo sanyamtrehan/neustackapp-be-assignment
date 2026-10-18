@@ -1,7 +1,10 @@
-import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Order } from './order.entity';
 
 @Entity('order_items')
+// Postgres does not index a foreign key automatically, and every order read
+// and the report look rows up by this column.
+@Index('order_items_order_idx', ['orderId'])
 @Check('order_items_quantity_positive', '"quantity" > 0')
 @Check('order_items_line_total_consistent', '"line_total_minor" = "unit_price_minor" * "quantity"')
 export class OrderItem {

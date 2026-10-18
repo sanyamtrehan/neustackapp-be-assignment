@@ -133,6 +133,43 @@ describe('admin report', () => {
     }).toEqual(rowsBefore);
   });
 
+  // The report answers with several queries. If they do not share one view of
+  // the data, a checkout committing between them makes the response disagree
+  // with itself: per-product revenue that the order totals do not account for.
+  it('stays internally consistent while orders are being placed', async () => {
+    const coupon = await (async () => {
+      for (let i = 0; i < 5; i += 1) await buy(BEANS.id, 1);
+      const { body } = await request(server()).post('/admin/coupons').expect(201);
+      return body.code;
+    })();
+
+    // Checkouts and report reads, all in flight together.
+    const work: Promise<unknown>[] = [];
+    for (let i = 0; i < 15; i += 1) {
+      work.push(buy(BEANS.id, 1));
+    }
+    work.push(buy(SCARCE_PRODUCT.id, 1, 201, coupon));
+    const reads: Promise<request.Response>[] = [];
+    for (let i = 0; i < 15; i += 1) {
+      reads.push(report().expect(200));
+    }
+    work.push(...reads);
+    await Promise.all(work);
+
+    for (const response of await Promise.all(reads)) {
+      const body = response.body;
+      const productTotal = body.productSales.reduce(
+        (sum: number, line: { grossRevenueMinor: number }) => sum + line.grossRevenueMinor,
+        0,
+      );
+
+      expect(body.netRevenueMinor).toBe(body.grossRevenueMinor - body.discountsGrantedMinor);
+      // Every sold line belongs to a counted order, and vice versa.
+      expect(productTotal).toBe(body.grossRevenueMinor);
+      expect(body.coupons.redeemed).toBeLessThanOrEqual(body.ordersPlaced);
+    }
+  });
+
   it('reports a renamed product once, under the name it last sold as', async () => {
     await buy(BEANS.id, 1);
     await app

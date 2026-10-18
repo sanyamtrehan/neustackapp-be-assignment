@@ -96,6 +96,7 @@ Failures return stable, distinguishable codes rather than prose, so a client can
 branch on them: `CART_NOT_FOUND`, `CART_ALREADY_CHECKED_OUT`, `CART_EMPTY`,
 `PRODUCT_NOT_FOUND`, `INVALID_QUANTITY`, `INSUFFICIENT_INVENTORY`,
 `COUPON_NOT_FOUND`, `COUPON_NOT_AVAILABLE`, `MILESTONE_NOT_REACHED`,
+`MILESTONE_ALREADY_REWARDED`, `CART_ITEM_NOT_FOUND`, `ORDER_NOT_FOUND`,
 `PAYMENT_FAILED`.
 
 ## Scaling beyond one instance

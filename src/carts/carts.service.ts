@@ -1,17 +1,24 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Product } from '../products/product.entity';
 import { CartItem } from './cart-item.entity';
 import { Cart } from './cart.entity';
 import { CartView, toCartView } from './cart.view';
 
+/** The cart row as the lock returns it; the lines are loaded separately. */
+interface LockedCart {
+  id: string;
+  status: string;
+}
+
 /**
  * Cart reads and mutations.
  *
- * Every mutation re-reads the cart, refuses it if the cart is no longer open,
- * and returns the whole cart afterwards so a client never has to guess what
- * the change produced.
+ * Every mutation runs in a transaction that starts by locking the cart row,
+ * the same row checkout locks. Edits and checkout therefore queue behind each
+ * other instead of interleaving, and two edits of one cart cannot both read
+ * the same state before either writes.
  *
  * Inventory is deliberately not consulted here. A cart may hold more units
  * than exist; the claim happens inside the checkout transaction, which is the
@@ -20,8 +27,8 @@ import { CartView, toCartView } from './cart.view';
 @Injectable()
 export class CartsService {
   constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Cart) private readonly carts: Repository<Cart>,
-    @InjectRepository(CartItem) private readonly items: Repository<CartItem>,
     @InjectRepository(Product) private readonly products: Repository<Product>,
   ) {}
 
@@ -43,15 +50,22 @@ export class CartsService {
    * @throws NotFoundException `CART_NOT_FOUND` if no such cart exists.
    */
   async view(cartId: string): Promise<CartView> {
-    return toCartView(await this.loadCart(cartId));
+    const cart = await this.carts.findOne({
+      where: { id: cartId },
+      relations: { items: { product: true } },
+    });
+    if (!cart) {
+      throw new NotFoundException({ code: 'CART_NOT_FOUND', message: `No cart ${cartId}` });
+    }
+    return toCartView(cart);
   }
 
   /**
    * Adds a product to a cart, or raises the quantity if it is already there.
    *
-   * Adding twice sums rather than failing: clients do resend "add to cart",
-   * and `cart_items_cart_product_unique` makes a duplicate row impossible
-   * anyway, so rejecting it would buy nothing.
+   * Adding twice sums rather than failing: clients do resend "add to cart".
+   * Because the cart row is locked first, two simultaneous adds queue, so the
+   * second reads the first one's quantity instead of overwriting it.
    *
    * @param cartId Cart to add to.
    * @param productId Product to add; must exist in the catalog.
@@ -61,17 +75,16 @@ export class CartsService {
    * @throws ConflictException `CART_ALREADY_CHECKED_OUT` if the cart is closed.
    */
   async addItem(cartId: string, productId: string, quantity: number): Promise<CartView> {
-    const cart = await this.loadCart(cartId);
-    this.assertOpen(cart);
-    await this.assertProductExists(productId);
+    return this.mutate(cartId, async (manager) => {
+      await this.assertProductExists(productId);
 
-    const existing = cart.items.find((item) => item.productId === productId);
-    if (existing) {
-      await this.items.update(existing.id, { quantity: existing.quantity + quantity });
-    } else {
-      await this.items.insert({ cartId, productId, quantity });
-    }
-    return this.view(cartId);
+      const existing = await manager.findOneBy(CartItem, { cartId, productId });
+      if (existing) {
+        await manager.update(CartItem, existing.id, { quantity: existing.quantity + quantity });
+      } else {
+        await manager.insert(CartItem, { cartId, productId, quantity });
+      }
+    });
   }
 
   /**
@@ -89,12 +102,10 @@ export class CartsService {
    * @throws ConflictException `CART_ALREADY_CHECKED_OUT` if the cart is closed.
    */
   async setItemQuantity(cartId: string, productId: string, quantity: number): Promise<CartView> {
-    const cart = await this.loadCart(cartId);
-    this.assertOpen(cart);
-    const existing = this.findItem(cart, productId);
-
-    await this.items.update(existing.id, { quantity });
-    return this.view(cartId);
+    return this.mutate(cartId, async (manager) => {
+      const existing = await this.findItem(manager, cartId, productId);
+      await manager.update(CartItem, existing.id, { quantity });
+    });
   }
 
   /**
@@ -107,69 +118,66 @@ export class CartsService {
    * @throws ConflictException `CART_ALREADY_CHECKED_OUT` if the cart is closed.
    */
   async removeItem(cartId: string, productId: string): Promise<CartView> {
-    const cart = await this.loadCart(cartId);
-    this.assertOpen(cart);
-    const existing = this.findItem(cart, productId);
+    return this.mutate(cartId, async (manager) => {
+      const existing = await this.findItem(manager, cartId, productId);
+      await manager.delete(CartItem, existing.id);
+    });
+  }
 
-    await this.items.delete(existing.id);
+  /**
+   * Runs a cart change under the cart's row lock.
+   *
+   * Shared by every mutation so none can forget the lock or the open check,
+   * which is what keeps an edit from landing in a cart that checkout has
+   * already closed.
+   *
+   * @param cartId Cart to change.
+   * @param change Work to do once the cart is locked and known open.
+   * @returns The cart as it stands after the transaction commits.
+   * @throws NotFoundException `CART_NOT_FOUND`.
+   * @throws ConflictException `CART_ALREADY_CHECKED_OUT`.
+   */
+  private async mutate(
+    cartId: string,
+    change: (manager: EntityManager) => Promise<void>,
+  ): Promise<CartView> {
+    await this.dataSource.transaction(async (manager) => {
+      const [cart] = (await manager.query(
+        'SELECT "id", "status" FROM "carts" WHERE "id" = $1 FOR UPDATE',
+        [cartId],
+      )) as LockedCart[];
+
+      if (!cart) {
+        throw new NotFoundException({ code: 'CART_NOT_FOUND', message: `No cart ${cartId}` });
+      }
+      if (cart.status !== 'open') {
+        throw new ConflictException({
+          code: 'CART_ALREADY_CHECKED_OUT',
+          message: `Cart ${cartId} has already been checked out`,
+        });
+      }
+
+      await change(manager);
+    });
+
     return this.view(cartId);
   }
 
   /**
-   * Loads a cart with its lines and their products.
+   * Finds a line in a locked cart.
    *
-   * Shared with checkout, which needs the same lines and the same failure
-   * code before it opens its transaction.
-   *
-   * @param cartId Cart to load.
-   * @returns The cart entity with `items` and each item's `product` populated.
-   * @throws NotFoundException `CART_NOT_FOUND` if no such cart exists.
-   */
-  async loadCart(cartId: string): Promise<Cart> {
-    const cart = await this.carts.findOne({
-      where: { id: cartId },
-      relations: { items: { product: true } },
-    });
-    if (!cart) {
-      throw new NotFoundException({ code: 'CART_NOT_FOUND', message: `No cart ${cartId}` });
-    }
-    return cart;
-  }
-
-  /**
-   * Guards every mutation: a checked out cart is immutable, because the order
-   * it produced already quoted these exact lines.
-   *
-   * This is an ordinary read-then-check, so it is not a concurrency control.
-   * Checkout re-checks the same thing under `SELECT ... FOR UPDATE`, which is
-   * what actually makes a double checkout impossible.
-   *
-   * @param cart Cart to check.
-   * @throws ConflictException `CART_ALREADY_CHECKED_OUT` if the cart is closed.
-   */
-  assertOpen(cart: Cart): void {
-    if (cart.status !== 'open') {
-      throw new ConflictException({
-        code: 'CART_ALREADY_CHECKED_OUT',
-        message: `Cart ${cart.id} has already been checked out`,
-      });
-    }
-  }
-
-  /**
-   * Finds a line in an already-loaded cart.
-   *
-   * @param cart Cart whose lines are searched.
-   * @param productId Product to find a line for.
-   * @returns The matching line.
    * @throws NotFoundException `CART_ITEM_NOT_FOUND` if the cart has no such line.
    */
-  private findItem(cart: Cart, productId: string): CartItem {
-    const item = cart.items.find((candidate) => candidate.productId === productId);
+  private async findItem(
+    manager: EntityManager,
+    cartId: string,
+    productId: string,
+  ): Promise<CartItem> {
+    const item = await manager.findOneBy(CartItem, { cartId, productId });
     if (!item) {
       throw new NotFoundException({
         code: 'CART_ITEM_NOT_FOUND',
-        message: `Cart ${cart.id} has no item for product ${productId}`,
+        message: `Cart ${cartId} has no item for product ${productId}`,
       });
     }
     return item;
@@ -179,7 +187,6 @@ export class CartsService {
    * Checks a product exists before an insert references it, so an unknown id
    * is a 404 with a code rather than a foreign key violation surfacing as 500.
    *
-   * @param productId Product to check.
    * @throws NotFoundException `PRODUCT_NOT_FOUND` if the catalog has no such product.
    */
   private async assertProductExists(productId: string): Promise<void> {

@@ -106,6 +106,41 @@ describe('carts', () => {
     expect(removed.body.subtotalMinor).toBe(0);
   });
 
+  describe('simultaneous edits of one cart', () => {
+    it('keeps every unit when the same product is added four times at once', async () => {
+      const cartId = await newCart();
+
+      const responses = await Promise.all(
+        Array.from({ length: 4 }, () => addItem(cartId, BEANS.id, 1)),
+      );
+
+      // Before the cart row lock, these raced: quantities were lost when two
+      // adds read the same row, and the losing insert returned a 500.
+      expect(responses.map((response) => response.status)).toEqual([201, 201, 201, 201]);
+
+      const { body } = await request(app.getHttpServer()).get(`/carts/${cartId}`).expect(200);
+      expect(body.items).toHaveLength(1);
+      expect(body.items[0].quantity).toBe(4);
+    });
+
+    it('settles on one quantity when four different quantities are set at once', async () => {
+      const cartId = await newCart();
+      await addItem(cartId, BEANS.id, 1).expect(201);
+
+      const responses = await Promise.all(
+        [2, 5, 9, 14].map((quantity) =>
+          request(app.getHttpServer())
+            .put(`/carts/${cartId}/items/${BEANS.id}`)
+            .send({ quantity }),
+        ),
+      );
+
+      expect(responses.every((response) => response.status === 200)).toBe(true);
+      const { body } = await request(app.getHttpServer()).get(`/carts/${cartId}`).expect(200);
+      expect([2, 5, 9, 14]).toContain(body.items[0].quantity);
+    });
+  });
+
   it('refuses to touch a line that is not in the cart', async () => {
     const cartId = await newCart();
     const { body } = await request(app.getHttpServer())

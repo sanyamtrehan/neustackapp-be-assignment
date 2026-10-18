@@ -136,6 +136,21 @@ describe('carts', () => {
       expect(body.items[0].quantity).toBe(4);
     });
 
+    // 20 is deliberately above the database connection pool size of 10. An
+    // earlier version checked the product through a second pooled connection
+    // while already holding one, and ten of these hung the service for good.
+    it('answers twenty simultaneous adds without exhausting the connection pool', async () => {
+      const cartIds = await Promise.all(Array.from({ length: 20 }, () => newCart()));
+
+      const responses = await Promise.all(
+        cartIds.map((cartId) => addItem(cartId, BEANS.id, 1)),
+      );
+
+      expect(responses.every((response) => response.status === 201)).toBe(true);
+      // And the service still answers afterwards.
+      await request(app.getHttpServer()).get('/admin/report').expect(200);
+    });
+
     it('settles on one quantity when four different quantities are set at once', async () => {
       const cartId = await newCart();
       await addItem(cartId, BEANS.id, 1).expect(201);

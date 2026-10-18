@@ -13,6 +13,13 @@ export const dataSourceOptions: DataSourceOptions = {
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   // Schema changes go through migrations so constraints are reviewable.
   synchronize: false,
+  extra: {
+    max: 10,
+    // Fail a request that cannot get a connection instead of waiting for one
+    // forever. Without this, code that holds a connection while asking for a
+    // second one takes the whole service down rather than erroring.
+    connectionTimeoutMillis: 5_000,
+  },
 };
 
 // Consumed by the TypeORM CLI; the application uses dataSourceOptions directly.

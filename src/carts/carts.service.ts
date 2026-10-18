@@ -29,7 +29,6 @@ export class CartsService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Cart) private readonly carts: Repository<Cart>,
-    @InjectRepository(Product) private readonly products: Repository<Product>,
   ) {}
 
   /**
@@ -76,7 +75,7 @@ export class CartsService {
    */
   async addItem(cartId: string, productId: string, quantity: number): Promise<CartView> {
     return this.mutate(cartId, async (manager) => {
-      await this.assertProductExists(productId);
+      await this.assertProductExists(manager, productId);
 
       const existing = await manager.findOneBy(CartItem, { cartId, productId });
       if (existing) {
@@ -187,10 +186,15 @@ export class CartsService {
    * Checks a product exists before an insert references it, so an unknown id
    * is a 404 with a code rather than a foreign key violation surfacing as 500.
    *
+   * Takes the transaction's manager rather than an injected repository. A
+   * repository would check out a second pooled connection while this request
+   * already holds one, and enough concurrent requests then wait on a
+   * connection none of them will release.
+   *
    * @throws NotFoundException `PRODUCT_NOT_FOUND` if the catalog has no such product.
    */
-  private async assertProductExists(productId: string): Promise<void> {
-    if (!(await this.products.existsBy({ id: productId }))) {
+  private async assertProductExists(manager: EntityManager, productId: string): Promise<void> {
+    if (!(await manager.existsBy(Product, { id: productId }))) {
       throw new NotFoundException({
         code: 'PRODUCT_NOT_FOUND',
         message: `No product ${productId}`,

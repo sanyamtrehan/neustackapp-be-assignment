@@ -15,11 +15,11 @@ Config reads `COUPON_N` (milestone interval) and `COUPON_X` (percent off) from
 env. One `docker compose up` must work on a machine that has never seen this
 project.
 
-## Phase 1 — Schema · ~45 min
+## Phase 1 — Schema · ~45 min ✅
 
-- [ ] `feat: add product and cart entities with migration`
-- [ ] `feat: add order and coupon entities with migration`
-- [ ] `feat: seed products`
+- [x] `feat: add product and cart entities with migration`
+- [x] `feat: add order and coupon entities with migration`
+- [x] `feat: seed products`
 
 Constraints land here, before any service code:
 

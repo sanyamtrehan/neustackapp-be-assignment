@@ -112,9 +112,12 @@ Branch on `code`; it is stable. Messages may be reworded.
 npm test
 ```
 
-77 tests. They need Postgres running and migrated, because the rules under
-test are partly enforced by database constraints — a mocked repository would
-prove nothing about them. The suite truncates and reseeds between tests.
+They need Postgres running and migrated, because the rules under test are
+partly enforced by database constraints — a mocked repository would prove
+nothing about them. The suite truncates and reseeds between tests.
+
+No count is quoted here on purpose: it went stale twice while the suite grew.
+`npm test` prints it.
 
 To watch a failed checkout roll back by hand, restart with
 `FAKE_PAYMENT_DECLINE=true npm run start:dev`, check out a cart holding a

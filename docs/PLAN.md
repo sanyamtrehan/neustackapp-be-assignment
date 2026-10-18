@@ -81,7 +81,8 @@ must not mutate state, and the test asserts that.
 ## Phase 7 — Errors and docs · ~45 min
 
 - [ ] `feat: add distinguishable error model`
-- [ ] `docs: add api documentation and readme`
+- [x] `docs: serve the openapi document through scalar` (pulled forward, done after phase 4)
+- [ ] `docs: add readme`
 
 Every failure path returns a stable, distinguishable code. Scalar serves the
 OpenAPI document Nest generates.

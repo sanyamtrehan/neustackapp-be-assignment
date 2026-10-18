@@ -33,9 +33,9 @@ Constraints land here, before any service code:
 
 Seed: five products, one with inventory 3 so contention is easy to exercise.
 
-## Phase 2 — Money · ~20 min
+## Phase 2 — Money · ~20 min ✅
 
-- [ ] `feat: add money helpers in minor units`
+- [x] `feat: add money helpers in minor units`
 
 Integer minor units with unit tests. Blocks everything downstream, so it comes
 early. The percentage-discount rounding rule is decided and tested here.

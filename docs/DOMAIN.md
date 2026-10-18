@@ -76,6 +76,20 @@ until confirmed.
 | Coupon expiry, minimum order value, per-customer limits | Deferred | Out of timebox. Recorded as deferred, not overlooked. |
 | Payment | Small abstraction with a fake implementation | Costs little and gives the transaction a realistic failure point, which is what proves invariant 4. |
 
+## Money and rounding
+
+Every amount is an integer in minor units (cents). No float ever holds a
+currency value, and `percentOfMinor` does its division in integer arithmetic:
+`scaled - (scaled % 100)` is an exact multiple of 100, so the divide cannot
+introduce a representation error.
+
+| Rule | Chosen | Reasoning |
+|---|---|---|
+| Rounding direction | Half **up** | 10% off 1255 is 126, not 125. The half cent goes to the customer, and a fixed rule reproduces the same total when an order is audited later. |
+| Discount larger than subtotal | Clamp to subtotal | A 100% coupon settles at zero. Guarantees invariant 6; `orders_amounts_non_negative` enforces the same thing in the database. |
+| Where rounding happens | Once, on the order subtotal | Rounding per line then summing would let the discount drift from `percent × subtotal`. |
+| Fractional input | Throws | A float reaching the money path is a bug upstream, not something to round away quietly. |
+
 ## Error model
 
 Failures return stable, distinguishable codes rather than prose, so a client can

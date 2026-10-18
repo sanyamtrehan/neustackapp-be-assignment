@@ -49,12 +49,12 @@ early. The percentage-discount rounding rule is decided and tested here.
 Invalid products and non-positive quantities never enter a cart. Viewing a cart
 returns line prices and totals computed from current product prices.
 
-## Phase 4 — Checkout · ~90 min — the centrepiece
+## Phase 4 — Checkout · ~90 min — the centrepiece ✅
 
-- [ ] `feat: add payment abstraction with fake provider`
-- [ ] `feat: add checkout transaction with inventory claim`
-- [ ] `feat: return existing order on checkout retry`
-- [ ] `test: cover concurrent checkout and retry replay`
+- [x] `feat: add payment abstraction with fake provider`
+- [x] `feat: add checkout transaction with inventory claim`
+- [x] `feat: return existing order on checkout retry` (merged into the commit above)
+- [x] `test: cover concurrent checkout and retry replay`
 
 One transaction (see `docs/DOMAIN.md`). Tests must include genuinely competing
 requests: N parallel checkouts against 3 units, asserting exactly 3 succeed and

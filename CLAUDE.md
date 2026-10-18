@@ -44,6 +44,9 @@ checkouts, inventory contention, and two operations competing for one coupon.
   in an error response and in a code review.
 - Entities and migrations must not drift: `npm run migration:generate` has to
   report "No changes in database schema were found" on a migrated database.
+- Public controller, service and helper functions carry JSDoc covering what
+  the function guarantees, every error code it throws, and the status code a
+  route returns. JSDoc that only restates the signature is noise: skip it.
 - New non-trivial logic ships with a test. Trivial changes do not need one.
 
 ## How we work

@@ -95,6 +95,43 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
   }
 }
 
+/**
+ * Inserts `count` placed orders straight into the database.
+ *
+ * Fixture only: milestone generation counts rows in `orders`, and driving a
+ * dozen real checkouts to reach a milestone would make these tests slow and
+ * would test checkout twice. Tests that care about checkout place real ones.
+ */
+export async function placeOrders(app: INestApplication, count: number): Promise<void> {
+  const dataSource = app.get(DataSource);
+  for (let i = 0; i < count; i += 1) {
+    const [cart] = await dataSource.query(
+      `INSERT INTO "carts" ("status") VALUES ('checked_out') RETURNING "id"`,
+    );
+    await dataSource.query(
+      `INSERT INTO "orders" ("cart_id", "subtotal_minor", "discount_minor", "total_minor")
+       VALUES ($1, 1000, 0, 1000)`,
+      [cart.id],
+    );
+  }
+}
+
+/** Reads a coupon's current status, to prove a failed checkout did not spend it. */
+export async function couponStatus(app: INestApplication, code: string): Promise<string> {
+  const [row] = await app
+    .get(DataSource)
+    .query('SELECT "status" FROM "coupons" WHERE "code" = $1', [code]);
+  return row?.status;
+}
+
+/** Reads a coupon's stored percentage, to prove config changes do not reprice it. */
+export async function couponPercent(app: INestApplication, code: string): Promise<number> {
+  const [row] = await app
+    .get(DataSource)
+    .query('SELECT "percent_off" FROM "coupons" WHERE "code" = $1', [code]);
+  return row?.percent_off;
+}
+
 export async function setInventory(app: INestApplication, productId: string, inventory: number): Promise<void> {
   await app.get(DataSource).query('UPDATE "products" SET "inventory" = $1 WHERE "id" = $2', [inventory, productId]);
 }
